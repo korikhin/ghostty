@@ -128,7 +128,7 @@ flags: packed struct {
     /// The checksum variant DECRQCRA computes, set via XTCHECKSUM.
     xt_checksum: xt_checksum.Flags = .{},
 
-    /// True if the window is focused.
+    /// True if the terminal view has keyboard focus.
     focused: bool = true,
 
     /// True if the terminal view may be visible. Unknown visibility is
@@ -4992,6 +4992,12 @@ pub fn fullReset(self: *Terminal) void {
 
     // Reset our basic state
     self.flags = .{
+        .xt_checksum = self.default_xt_checksum,
+
+        // Focus belongs to the view rather than terminal state, so a
+        // reset must not make an unfocused view send false focus reports.
+        .focused = self.flags.focused,
+
         // Visibility belongs to the view rather than terminal state, so a
         // terminal reset must not make a hidden view potentially visible.
         .visible = self.flags.visible,
@@ -4999,8 +5005,6 @@ pub fn fullReset(self: *Terminal) void {
         // This is configuration based on the pty rather than terminal
         // state, so a terminal reset must not change it.
         .resize_pull_scrollback = self.flags.resize_pull_scrollback,
-
-        .xt_checksum = self.default_xt_checksum,
     };
     self.modes.reset();
     self.tabstops.reset(TABSTOP_INTERVAL);
@@ -16013,6 +16017,15 @@ test "Terminal: fullReset status display" {
     t.status_display = .status_line;
     t.fullReset();
     try testing.expect(t.status_display == .main);
+}
+
+test "Terminal: fullReset keeps focus" {
+    var t = try init(testing.io, testing.allocator, .{ .cols = 10, .rows = 10 });
+    defer t.deinit(testing.allocator);
+
+    t.flags.focused = false;
+    t.fullReset();
+    try testing.expect(!t.flags.focused);
 }
 
 test "Terminal: fullReset preserves kitty graphics limits" {
